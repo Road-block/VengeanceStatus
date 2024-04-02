@@ -1,0 +1,13 @@
+## Interface: 40400
+## Version: 1.0
+## Title: Vengeance Status
+## Notes: Tank Vengeance Information Widget
+## IconTexture: Interface\ICONS\ability_paladin_shieldofvengeance
+## Author: Road-block
+## SavedVariables: VengeanceStatusDB
+## OptionalDeps: Ace3, LibSharedMedia-3.0, LibSink-2.0, LibDataBroker-1.1, LibDBIcon-1.0
+
+Locales\locales.xml
+Libs\libs.xml
+
+core.lua
