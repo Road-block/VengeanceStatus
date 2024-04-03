@@ -45,8 +45,8 @@ end
 _p.unit_events:SetScript("OnEvent", _p.unit_events.OnEvent)
 
 _p.consolecmd = {type = "group", handler = addon, args = {
-  show = {type="execute",name=_G.SHOW,desc=L.CMD_SHOW,func=function()end,order=1},
-  lock = {type="execute",name=L.CMD_LOCK,desc=L.CMD_LOCK,func=function()end,order=2},
+  show = {type="execute",name=_G.SHOW,desc=L.CMD_SHOW,func=function()addon:ToggleShown()end,order=1},
+  lock = {type="execute",name=L.CMD_LOCK,desc=L.CMD_LOCK,func=function()addon:ToggleLocked()end,order=2},
   reset = {type="execute",name=_G.RESET,desc=L.CMD_RESET,func=function()end,order=3},
 }}
 
@@ -110,13 +110,23 @@ _p.bar_defaults = {
   x = 0,
   y = -80,
   texture = "Interface\\TargetingFrame\\UI-StatusBar",
-  border = "Interface\\CastingBar\\UI-CastingBar-Border-Small",
-  spark = "Interface\\CastingBar\\UI-CastingBar-Spark",
-  flash = "Interface\\CastingBar\\UI-CastingBar-Flash-Small",
-  font = "SystemFont_Shadow_Med1_Outline",
+  fontOptions = {
+    font = "SystemFont_Shadow_Med1_Outline",
+    size = 18,
+  },
   color = {0.5,0.5,0.5,1},
   fillColor = {0.85,0.0,0.0,0.85},
   bgColor = {0.1,0.1,0.1,1},
+  borderOptions = {
+    color = {0.8,0.8,0.8,1},
+    size = 2,
+  },
+  iconOptions = {
+    size = 18,
+    padding = 2,
+  },
+  spark = "Interface\\CastingBar\\UI-CastingBar-Spark",
+  flash = "Interface\\AddOns\\"..addonName.."\\Media\\Flash", --Interface\\CastingBar\\UI-CastingBar-Flash-Small
   iconSize = 18,
 }
 function addon:createUI()
@@ -160,7 +170,9 @@ function addon:createUI()
     self:EnableMouse(false)
     self:SetMovable(false)
     self.locked = true
-    addon.db.char.barOptions.point, _, addon.db.char.barOptions.relPoint, addon.db.char.barOptions.x, addon.db.char.barOptions.y = self:GetPoint()
+    addon.db.profile.barOptions.point, _, addon.db.profile.barOptions.relPoint, addon.db.profile.barOptions.x, addon.db.profile.barOptions.y = self:GetPoint()
+    self.hint:Hide()
+    addon.db.global.lock = true
   end
   function VengeanceStatusBarMixin:Unlock()
     self:EnableMouse(true)
@@ -170,6 +182,9 @@ function addon:createUI()
     end)
     self:SetScript("OnMouseUp", function(f,button)
       self:StopMovingOrSizing()
+      if button=="RightButton" then
+        self:Lock()
+      end
     end)
     self:SetScript("OnHide", function(f)
       self:StopMovingOrSizing()
@@ -177,10 +192,26 @@ function addon:createUI()
     self:SetScript("OnLeave", function(f)
       self:StopMovingOrSizing()
     end)
+    self.hint:Show()
     self.locked = false
+    addon.db.global.lock = false
   end
-  function VengeanceStatusBarMixin:SetBorder(border)
-    self.border:SetTexture(border)
+  function VengeanceStatusBarMixin:SetBorder(size)
+    if not size or (size <= 0) then
+      self.border:Hide()
+    else
+      self.border:Show()
+      self.border:SetPoint("TOPLEFT",self,"TOPLEFT",-size,size)
+      self.border:SetPoint("BOTTOMRIGHT",self,"BOTTOMRIGHT",size,-size)
+    end
+  end
+  function VengeanceStatusBarMixin:SetBorderColor(r,g,b,a)
+    self.border:SetVertexColor(r,g,b,a)
+  end
+  function VengeanceStatusBarMixin:SetFont(font,size)
+    self.textLeft:SetFont(font,size,"")
+    self.textCenter:SetFont(font,size,"")
+    self.textRight:SetFont(font,size,"")
   end
   function VengeanceStatusBarMixin:ApplySettings(method, ...)
     if self[method] then
@@ -200,7 +231,8 @@ function addon:createUI()
       self.spark:SetPoint("CENTER",self, "LEFT", sparkPos, 0)
       self.spark:Show()
     end
-    if v >= (vMax*.95) then
+    local flashPct = addon.db.profile.flashpct or 0.95
+    if v >= (vMax*flashPct) then
       self:StartFlashing()
     elseif v > 0 then
       self:StopFlashing()
@@ -222,6 +254,7 @@ function addon:createUI()
     self:SetRightText(textR)
     self:SetCenterText(textC)
   end
+
   local barOpt = self:GetBarOptions()
   barOpt = setmetatable(barOpt or {}, {__index = function(t,k)
     return _p.bar_defaults[k]
@@ -237,40 +270,45 @@ function addon:createUI()
   bar:SetMinMaxValues(0,100)
   bar:SetValue(0)
   bar.locked = true
-  local drawLayer = "BORDER"
+  local drawLayer = "ARTWORK"
   bar:SetDrawLayerEnabled(drawLayer,true)
-  drawLayer = "BACKGROUND"
+  drawLayer = "BORDER"
   bar.background = bar:CreateTexture()
   bar.background:SetAllPoints()
   bar.background:SetDrawLayer(drawLayer)
   bar.background:SetColorTexture(unpack(barOpt.bgColor))
-  drawLayer = "ARTWORK"
+  drawLayer = "BACKGROUND"
   bar.border = bar:CreateTexture()
-  bar.border:SetTexture(barOpt.border)
-  bar.border:SetPoint("TOPLEFT",bar,"TOPLEFT",-34,26)
-  bar.border:SetPoint("BOTTOMRIGHT",bar,"BOTTOMRIGHT",34,-26)
+  bar.border:SetTexture("Interface\\BUTTONS\\WHITE8X8")
+  bar.border:SetPoint("TOPLEFT",bar,"TOPLEFT",-barOpt.borderOptions.size,barOpt.borderOptions.size)
+  bar.border:SetPoint("BOTTOMRIGHT",bar,"BOTTOMRIGHT",barOpt.borderOptions.size,-barOpt.borderOptions.size)
+  bar.border:SetVertexColor(unpack(barOpt.borderOptions.color))
   bar.border:SetDrawLayer(drawLayer,1)
-  --bar.border:Hide()
   bar.iconLeft = bar:CreateTexture()
-  bar.iconLeft:SetSize(barOpt.iconSize,barOpt.iconSize)
-  bar.iconLeft:SetPoint("RIGHT",bar,"LEFT",2,0)
+  bar.iconLeft:SetSize(barOpt.iconOptions.size,barOpt.iconOptions.size)
+  bar.iconLeft:SetPoint("RIGHT",bar,"LEFT",barOpt.iconOptions.padding,0)
   bar.iconLeft:SetDrawLayer(drawLayer,2)
   bar.iconLeft:Hide()
   bar.iconRight = bar:CreateTexture()
   bar.iconRight:SetSize(barOpt.iconSize,barOpt.iconSize)
-  bar.iconRight:SetPoint("LEFT",bar,"RIGHT",-3,0)
+  bar.iconRight:SetPoint("LEFT",bar,"RIGHT",-barOpt.iconOptions.padding,0)
   bar.iconRight:SetDrawLayer(drawLayer,2)
   bar.iconRight:Hide()
-  bar.textLeft = bar:CreateFontString(nil,drawLayer,barOpt.font)
-  bar.textLeft:SetSize(math.floor(barOpt.width/3),16)
+  drawLayer = "ARTWORK"
+  bar.textLeft = bar:CreateFontString(nil,drawLayer)
+  local fontPath = LSM:Fetch("font",barOpt.fontOptions.font)
+  bar.textLeft:SetFont(fontPath,barOpt.fontOptions.size)
+  bar.textLeft:SetSize(math.floor(barOpt.width/3),barOpt.fontOptions.size)
   bar.textLeft:SetPoint("LEFT")
   bar.textLeft:SetJustifyH("LEFT")
-  bar.textCenter = bar:CreateFontString(nil,drawLayer,barOpt.font)
-  bar.textCenter:SetSize(math.floor(barOpt.width/3),16)
+  bar.textCenter = bar:CreateFontString(nil,drawLayer)
+  bar.textCenter:SetFont(fontPath,barOpt.fontOptions.size)
+  bar.textCenter:SetSize(math.floor(barOpt.width/3),barOpt.fontOptions.size)
   bar.textCenter:SetPoint("CENTER")
   bar.textCenter:SetJustifyH("CENTER")
-  bar.textRight = bar:CreateFontString(nil,drawLayer,barOpt.font)
-  bar.textRight:SetSize(math.floor(barOpt.width/3),16)
+  bar.textRight = bar:CreateFontString(nil,drawLayer)
+  bar.textRight:SetFont(fontPath,barOpt.fontOptions.size)
+  bar.textRight:SetSize(math.floor(barOpt.width/3),barOpt.fontOptions.size)
   bar.textRight:SetPoint("RIGHT")
   bar.textRight:SetJustifyH("RIGHT")
   drawLayer = "OVERLAY"
@@ -282,8 +320,8 @@ function addon:createUI()
   bar.spark:SetBlendMode("ADD")
   bar.spark:Hide()
   bar.flash = bar:CreateTexture()
-  bar.flash:SetPoint("TOPLEFT",bar.border,"TOPLEFT",0,0)
-  bar.flash:SetPoint("BOTTOMRIGHT",bar.border,"BOTTOMRIGHT",0,0)
+  bar.flash:SetPoint("TOPLEFT",bar.border,"TOPLEFT",-4,4)
+  bar.flash:SetPoint("BOTTOMRIGHT",bar.border,"BOTTOMRIGHT",4,-4)
   bar.flash:SetTexture(barOpt.flash)
   bar.flash:SetDrawLayer(drawLayer)
   bar.flash:SetBlendMode("ADD")
@@ -292,8 +330,21 @@ function addon:createUI()
   bar.flash.anim:SetLooping("BOUNCE")
   local alpha = bar.flash.anim:CreateAnimation("ALPHA")
   alpha:SetFromAlpha(0)
-  alpha:SetToAlpha(0.75)
+  alpha:SetToAlpha(0.9)
   alpha:SetDuration(1.0)
+  drawLayer = "HIGHLIGHT"
+  bar.mover = bar:CreateTexture()
+  bar.mover:SetAllPoints()
+  bar.mover:SetDrawLayer(drawLayer)
+  bar.mover:SetColorTexture(0,1.0,0,0.9)
+  bar.hint = bar:CreateFontString(nil,drawLayer,"GameFontBlack")
+  bar.hint:SetSize(bar:GetWidth(),bar:GetHeight())
+  bar.hint:SetPoint("CENTER")
+  bar.hint:SetJustifyH("CENTER")
+  bar.hint:SetJustifyV("TOP")
+  bar.hint:SetText(L["Drag to Move. Right-click to Lock."])
+  bar.hint:SetWordWrap(true)
+  bar.hint:Hide()
 
   Mixin(bar,VengeanceStatusBarMixin)
 
@@ -302,7 +353,7 @@ function addon:createUI()
 end
 
 function addon:GetBarOptions()
-  return CopyTable(self.db.char.barOptions)
+  return CopyTable(self.db.profile.barOptions)
 end
 
 function addon:ToggleOptionsFrame()
@@ -310,6 +361,16 @@ function addon:ToggleOptionsFrame()
     ACD:Close(addonName)
   else
     ACD:Open(addonName,"general")
+  end
+end
+
+function addon:ToggleShown(status)
+  if status == nil then
+    status = not addon.db.profile.hide
+  end
+  if _p.Bar then
+    _p.Bar[(status and "Hide" or "Show")](_p.Bar)
+    addon.db.profile.hide = not _p.Bar:IsShown()
   end
 end
 
@@ -330,6 +391,7 @@ function addon:Report()
 end
 
 function addon:RefreshConfig()
+
 end
 
 function addon:GetOptionTable()
@@ -358,29 +420,63 @@ function addon:GetOptionTable()
           order = 3,
           args = { },
         },
+        api = {
+          type = "group",
+          name = L["API Doc"],
+          order = 4,
+          args = { },
+        },
       }
     }
   }}
+  _p.Options.args.general.args.main.args.hidebar = {
+    type = "toggle",
+    name = L["Hide Statusbar"],
+    desc = L["Use VengeanceStatus as an LDB feed & API only"],
+    order = 5,
+    get = function() return not not addon.db.profile.hide end,
+    set = function(info, val)
+      addon.db.profile.hide = val
+      addon:ToggleShown(not not val)
+    end,
+  }
+  _p.Options.args.general.args.main.args.minimap = {
+    type = "toggle",
+    name = L["Hide from Minimap"],
+    desc = L["Hide from Minimap"],
+    order = 10,
+    get = function() return not not addon.db.global.minimap.hide end,
+    set = function(info, val)
+      addon.db.global.minimap.hide = not addon.db.global.minimap.hide
+    end,
+  }
   _p.Options.args.general.args.main.args.lock = {
     type = "toggle",
     name = L.CMD_LOCK,
     desc = L.CMD_LOCK,
     order = 20,
-    get = function() return not not addon.db.char.lock end,
+    get = function() return not not addon.db.global.lock end,
     set = function(info, val)
-      addon.db.char.lock = not addon.db.char.lock
-      addon:ToggleLocked(addon.db.char.lock)
+      addon.db.global.lock = not addon.db.global.lock
+      addon:ToggleLocked(addon.db.global.lock)
     end,
+  }
+  _p.Options.args.general.args.main.args.headerBar = {
+    type = "header",
+    name = L["Statusbar Options"],
+    desc = L["Statusbar Options"],
+    order = 21,
   }
   _p.Options.args.general.args.main.args.width = {
     type = "input",
     name = L["Width"],
     desc = L["Width"],
     order = 25,
-    get = function() return tostring(addon.db.char.barOptions.width) end,
+    width = 0.5,
+    get = function() return tostring(addon.db.profile.barOptions.width) end,
     set = function(info, val)
-      addon.db.char.barOptions.width = tonumber(val)
-      _p.Bar:ApplySettings("SetWidth",addon.db.char.barOptions.width)
+      addon.db.profile.barOptions.width = tonumber(val)
+      _p.Bar:ApplySettings("SetWidth",addon.db.profile.barOptions.width)
     end,
   }
   _p.Options.args.general.args.main.args.height = {
@@ -388,34 +484,94 @@ function addon:GetOptionTable()
     name = L["Height"],
     desc = L["Height"],
     order = 26,
-    get = function() return tostring(addon.db.char.barOptions.height) end,
+    width = 0.4,
+    get = function() return tostring(addon.db.profile.barOptions.height) end,
     set = function(info, val)
-      addon.db.char.barOptions.height = tonumber(val)
-      _p.Bar:ApplySettings("SetHeight",addon.db.char.barOptions.height)
+      addon.db.profile.barOptions.height = tonumber(val)
+      _p.Bar:ApplySettings("SetHeight",addon.db.profile.barOptions.height)
     end,
+  }
+  _p.Options.args.general.args.main.args.font = {
+    type = "select",
+    name = L["Font"],
+    desc = L["Font"],
+    order = 27,
+    get = function() return addon.db.profile.barOptions.fontOptions.font end,
+    set = function(info, val)
+      addon.db.profile.barOptions.fontOptions.font = val
+      local fontPath = LSM:Fetch("font",addon.db.profile.barOptions.fontOptions.font)
+      local fontSize = addon.db.profile.barOptions.fontOptions.size
+      _p.Bar:ApplySettings("SetFont",fontPath, fontSize)
+    end,
+    values = LSM:HashTable("font"),
+    dialogControl = "LSM30_Font",
+  }
+  _p.Options.args.general.args.main.args.fontsize = {
+    type = "select",
+    name = _G.FONT_SIZE,
+    desc = _G.FONT_SIZE,
+    order = 28,
+    width = 0.5,
+    get = function() return addon.db.profile.barOptions.fontOptions.size end,
+    set = function(info, val)
+      addon.db.profile.barOptions.fontOptions.size = val
+      local fontPath = LSM:Fetch("font",addon.db.profile.barOptions.fontOptions.font)
+      local fontSize = addon.db.profile.barOptions.fontOptions.size
+      _p.Bar:ApplySettings("SetFont",fontPath, fontSize)
+    end,
+    values = {[12]="12",[14]="14",[16]="16",[18]="18",[20]="20",[22]="22",[24]="24",[26]="28"},
   }
   _p.Options.args.general.args.main.args.border = {
-    type = "select",
-    name = L["Border"],
-    desc = L["Set the statusbar border."],
-    order = 30,
-    get = function(info) return addon.db.char.barOptions.border end,
-    set = function(info, value)
-        addon.db.char.barOptions.border = value
-        _p.Bar:ApplySettings("SetBorder",LSM:Fetch("border",addon.db.char.barOptions.border))
-    end,
-    values = LSM:HashTable("border"),
-    dialogControl = "LSM30_Statusbar",
-  }
-  _p.Options.args.general.args.main.args.minimap = {
-    type = "toggle",
-    name = L["Hide from Minimap"],
-    desc = L["Hide from Minimap"],
-    order = 120,
-    get = function() return not not addon.db.profile.minimap.hide end,
+    type = "range",
+    name = L["Border Size"],
+    desc = L["Border Size"],
+    order = 29,
+    get = function() return addon.db.profile.barOptions.borderOptions.size end,
     set = function(info, val)
-      addon.db.profile.minimap.hide = not addon.db.profile.minimap.hide
+      addon.db.profile.barOptions.borderOptions.size = val
+      local size = math.floor(val)
+      _p.Bar:ApplySettings("SetBorder",size)
     end,
+    min = 0,
+    max = 5,
+    step = 1,
+  }
+  _p.Options.args.general.args.main.args.bordercolor = {
+    type = "color",
+    name = L["Border Color"],
+    desc = L["Border Color"],
+    hasAlpha = true,
+    order = 30,
+    get = function(info)
+      local colortab = addon.db.profile.barOptions.borderOptions.color
+      return colortab[1], colortab[2], colortab[3], colortab[4]
+    end,
+    set = function(info, r,g,b,a)
+      addon.db.profile.barOptions.borderOptions.color[1] = r
+      addon.db.profile.barOptions.borderOptions.color[2] = g
+      addon.db.profile.barOptions.borderOptions.color[3] = b
+      addon.db.profile.barOptions.borderOptions.color[4] = a
+      _p.Bar:ApplySettings("SetBorderColor",r,g,b,a)
+    end
+  }
+  _p.Options.args.general.args.main.args.flashpct = {
+    type = "range",
+    name = L["Flash Bar"],
+    desc = L["Set the % of Max Vengeance that flashes the bar."],
+    order = 31,
+    get = function(info) return addon.db.profile.flashpct end,
+    set = function(info, val)
+      addon.db.profile.flashpct = val
+    end,
+    min = 0.4,
+    max = 1.05,
+    step = 0.05,
+  }
+  -- API
+  _p.Options.args.general.args.api.args.doc = {
+    type = "description",
+    name = L.APIDOC,
+    order = 1,
   }
   return _p.Options
 end
@@ -492,17 +648,27 @@ end
 
 -- INSTANTIATION
 local defaults = {
-  profile = {
+  global = {
     minimap = {hide = false,},
-  },
-  char = {
     lock = true,
-    barOptions = {},
+  },
+  profile = {
+    hide = false,
+    flashpct = 0.95,
+    barOptions = {
+      borderOptions={},
+      iconOptions={},
+      fontOptions={},
+    },
   },
 }
 do
   for k,v in pairs(_p.bar_defaults) do
-    defaults.char.barOptions[k] = v
+    --if type(v)=="table" then
+    --  defaults.profile.barOptions[k] = CopyTable(v)
+    --else
+      defaults.profile.barOptions[k] = v
+    --end
   end
 end
 function addon:OnInitialize() -- ADDON_LOADED
@@ -530,7 +696,7 @@ function addon:OnInitialize() -- ADDON_LOADED
   LDBO.icon = _p.spellInfo.icon
   LDBO.OnClick = addon.OnLDBClick
   LDBO.OnTooltipShow = addon.OnLDBTooltipShow
-  LDI:Register(addonName, LDBO, addon.db.profile.minimap)
+  LDI:Register(addonName, LDBO, addon.db.global.minimap)
 end
 
 function addon:OnEnable() -- PLAYER_LOGIN
@@ -544,11 +710,17 @@ function addon:OnEnable() -- PLAYER_LOGIN
     return
   end
   self:RegisterEvent("PLAYER_ENTERING_WORLD")
+  self:ToggleLocked(not not addon.db.global.lock)
+  self:ToggleShown(not not addon.db.profile.hide)
 end
 
 function addon.OnLDBClick(obj,button)
   if button == "LeftButton" then
-    addon:Report()
+    if IsShiftKeyDown() then
+      addon:ToggleShown()
+    else
+      addon:Report()
+    end
   elseif button == "RightButton" then
     addon:ToggleOptionsFrame()
   elseif button == "MiddleButton" then
@@ -564,6 +736,8 @@ function addon.OnLDBTooltipShow(tooltip)
   hint = L["|cffff7f00Right Click|r to open options"]
   tooltip:AddLine(hint)
   hint = L["|cffff7f00Middle Click|r to toggle lock"]
+  tooltip:AddLine(hint)
+  hint = L["|cffff7f00Shift Click|r to hide the bar"]
   tooltip:AddLine(hint)
 end
 
@@ -801,5 +975,5 @@ Vengeance Decay: Last Value/10 every 2 sec (20sec from last addition to zero out
 Vengeance Add: 33% of first damage taken, 33% of a rolling 2 sec average, if less than cap
 Vengeance from Vigilance: 20% of your vigilance target damage taken as if taken by you
                           Same 33% rule applied.
-Vigilance range: 30 to apply, 80+ still applies effect (probably unlimited while char visible)
+Vigilance range: 30 to apply, 80+ still applies effect (probably unlimited while character visible)
 ]]
