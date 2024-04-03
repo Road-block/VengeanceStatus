@@ -1,0 +1,7 @@
+package-as: VengeanceStatus
+enable-nolib-creation: no
+
+ignore:
+  - .gitignore
+  - .pkgmeta
+  - README.md
