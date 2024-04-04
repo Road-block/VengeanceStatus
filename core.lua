@@ -112,6 +112,7 @@ _p.bar_defaults = {
   texture = "Interface\\TargetingFrame\\UI-StatusBar",
   fontOptions = {
     font = "SystemFont_Shadow_Med1_Outline",
+    color = {1.0,1.0,1.0,1},
     size = 18,
   },
   color = {0.5,0.5,0.5,1},
@@ -126,7 +127,7 @@ _p.bar_defaults = {
     padding = 2,
   },
   spark = "Interface\\CastingBar\\UI-CastingBar-Spark",
-  flash = "Interface\\AddOns\\"..addonName.."\\Media\\Flash", --Interface\\CastingBar\\UI-CastingBar-Flash-Small
+  flash = "Interface\\AddOns\\"..addonName.."\\Media\\Flash-Square",
   iconSize = 18,
 }
 function addon:createUI()
@@ -212,6 +213,11 @@ function addon:createUI()
     self.textLeft:SetFont(font,size,"")
     self.textCenter:SetFont(font,size,"")
     self.textRight:SetFont(font,size,"")
+  end
+  function VengeanceStatusBarMixin:SetFontColor(r,g,b,a)
+    self.textLeft:SetTextColor(r,g,b,a)
+    self.textCenter:SetTextColor(r,g,b,a)
+    self.textRight:SetTextColor(r,g,b,a)
   end
   function VengeanceStatusBarMixin:ApplySettings(method, ...)
     if self[method] then
@@ -299,16 +305,19 @@ function addon:createUI()
   local fontPath = LSM:Fetch("font",barOpt.fontOptions.font)
   bar.textLeft:SetFont(fontPath,barOpt.fontOptions.size)
   bar.textLeft:SetSize(math.floor(barOpt.width/3),barOpt.fontOptions.size)
+  bar.textLeft:SetTextColor(unpack(barOpt.fontOptions.color))
   bar.textLeft:SetPoint("LEFT")
   bar.textLeft:SetJustifyH("LEFT")
   bar.textCenter = bar:CreateFontString(nil,drawLayer)
   bar.textCenter:SetFont(fontPath,barOpt.fontOptions.size)
   bar.textCenter:SetSize(math.floor(barOpt.width/3),barOpt.fontOptions.size)
+  bar.textCenter:SetTextColor(unpack(barOpt.fontOptions.color))
   bar.textCenter:SetPoint("CENTER")
   bar.textCenter:SetJustifyH("CENTER")
   bar.textRight = bar:CreateFontString(nil,drawLayer)
   bar.textRight:SetFont(fontPath,barOpt.fontOptions.size)
   bar.textRight:SetSize(math.floor(barOpt.width/3),barOpt.fontOptions.size)
+  bar.textRight:SetTextColor(unpack(barOpt.fontOptions.color))
   bar.textRight:SetPoint("RIGHT")
   bar.textRight:SetJustifyH("RIGHT")
   drawLayer = "OVERLAY"
@@ -320,8 +329,8 @@ function addon:createUI()
   bar.spark:SetBlendMode("ADD")
   bar.spark:Hide()
   bar.flash = bar:CreateTexture()
-  bar.flash:SetPoint("TOPLEFT",bar.border,"TOPLEFT",-4,4)
-  bar.flash:SetPoint("BOTTOMRIGHT",bar.border,"BOTTOMRIGHT",4,-4)
+  bar.flash:SetPoint("TOPLEFT",bar.border,"TOPLEFT",-3,3)
+  bar.flash:SetPoint("BOTTOMRIGHT",bar.border,"BOTTOMRIGHT",3,-3)
   bar.flash:SetTexture(barOpt.flash)
   bar.flash:SetDrawLayer(drawLayer)
   bar.flash:SetBlendMode("ADD")
@@ -408,21 +417,21 @@ function addon:GetOptionTable()
           order = 1,
           args = { },
         },
+        api = {
+          type = "group",
+          name = L["API Doc"],
+          order = 2,
+          args = { },
+        },
         stats = {
           type = "group",
           name = L["Stats"],
-          order = 2,
+          order = 3,
           args = { },
         },
         history = {
           type = "group",
           name = L["History"],
-          order = 3,
-          args = { },
-        },
-        api = {
-          type = "group",
-          name = L["API Doc"],
           order = 4,
           args = { },
         },
@@ -491,11 +500,29 @@ function addon:GetOptionTable()
       _p.Bar:ApplySettings("SetHeight",addon.db.profile.barOptions.height)
     end,
   }
+  _p.Options.args.general.args.main.args.fillColor = {
+    type = "color",
+    name = L["Fill Color"],
+    desc = L["Fill Color"],
+    hasAlpha = true,
+    order = 27,
+    get = function(info)
+      local colortab = addon.db.profile.barOptions.fillColor
+      return colortab[1], colortab[2], colortab[3], colortab[4]
+    end,
+    set = function(info, r,g,b,a)
+      addon.db.profile.barOptions.fillColor[1] = r
+      addon.db.profile.barOptions.fillColor[2] = g
+      addon.db.profile.barOptions.fillColor[3] = b
+      addon.db.profile.barOptions.fillColor[4] = a
+      _p.Bar:ApplySettings("SetColorFill",r,g,b,a)
+    end
+  }
   _p.Options.args.general.args.main.args.font = {
     type = "select",
     name = L["Font"],
     desc = L["Font"],
-    order = 27,
+    order = 28,
     get = function() return addon.db.profile.barOptions.fontOptions.font end,
     set = function(info, val)
       addon.db.profile.barOptions.fontOptions.font = val
@@ -506,11 +533,29 @@ function addon:GetOptionTable()
     values = LSM:HashTable("font"),
     dialogControl = "LSM30_Font",
   }
+  _p.Options.args.general.args.main.args.fontcolor = {
+    type = "color",
+    name = L["Text Color"],
+    desc = L["Text Color"],
+    hasAlpha = true,
+    order = 29,
+    get = function(info)
+      local colortab = addon.db.profile.barOptions.fontOptions.color
+      return colortab[1], colortab[2], colortab[3], colortab[4]
+    end,
+    set = function(info, r,g,b,a)
+      addon.db.profile.barOptions.fontOptions.color[1] = r
+      addon.db.profile.barOptions.fontOptions.color[2] = g
+      addon.db.profile.barOptions.fontOptions.color[3] = b
+      addon.db.profile.barOptions.fontOptions.color[4] = a
+      _p.Bar:ApplySettings("SetFontColor",r,g,b,a)
+    end
+  }
   _p.Options.args.general.args.main.args.fontsize = {
     type = "select",
     name = _G.FONT_SIZE,
     desc = _G.FONT_SIZE,
-    order = 28,
+    order = 30,
     width = 0.5,
     get = function() return addon.db.profile.barOptions.fontOptions.size end,
     set = function(info, val)
@@ -525,7 +570,7 @@ function addon:GetOptionTable()
     type = "range",
     name = L["Border Size"],
     desc = L["Border Size"],
-    order = 29,
+    order = 31,
     get = function() return addon.db.profile.barOptions.borderOptions.size end,
     set = function(info, val)
       addon.db.profile.barOptions.borderOptions.size = val
@@ -541,7 +586,7 @@ function addon:GetOptionTable()
     name = L["Border Color"],
     desc = L["Border Color"],
     hasAlpha = true,
-    order = 30,
+    order = 32,
     get = function(info)
       local colortab = addon.db.profile.barOptions.borderOptions.color
       return colortab[1], colortab[2], colortab[3], colortab[4]
@@ -558,7 +603,7 @@ function addon:GetOptionTable()
     type = "range",
     name = L["Flash Bar"],
     desc = L["Set the % of Max Vengeance that flashes the bar."],
-    order = 31,
+    order = 33,
     get = function(info) return addon.db.profile.flashpct end,
     set = function(info, val)
       addon.db.profile.flashpct = val
