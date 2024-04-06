@@ -651,6 +651,9 @@ function addon:startProcessing()
   _p.unit_events:RegisterUnitEvent("UNIT_AURA","player")
   _p.cleu_parser:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
   self:GetVengeance()
+  if not addon.db.profile.hide then
+    _p.Bar:Show()
+  end
 end
 
 function addon:stopProcessing()
@@ -659,6 +662,7 @@ function addon:stopProcessing()
   _p.unit_events:UnregisterEvent("UNIT_AURA","player")
   _p.cleu_parser:UnregisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
   self:GetVengeance(0)
+  _p.Bar:Hide()
 end
 
 function addon:DispatchUpdates(feed)
@@ -793,7 +797,7 @@ function addon:LEARNED_SPELL_IN_TAB(args)
     for spellID in pairs(args) do
       if spellID == _p.spellID then
         self:startProcessing()
-        self:UnregisterBucketEvent(_p.spell_learned_bucket)
+        self:UnregisterBucket(_p.spell_learned_bucket)
         break
       end
     end
