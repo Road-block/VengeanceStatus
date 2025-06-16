@@ -1,4 +1,4 @@
-## Interface: 40402
+## Interface: 50500
 ## Version: 0.9.3
 ## Title: Vengeance Status
 ## Notes: Tank Vengeance Information Widget

@@ -19,6 +19,7 @@ if not addon._cata then -- cata beta workaround build 53750, wow_project_id not 
   addon._bcc = _G.WOW_PROJECT_ID and (_G.WOW_PROJECT_ID == _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC) or false
   addon._wrath = _G.WOW_PROJECT_ID and (_G.WOW_PROJECT_ID == _G.WOW_PROJECT_WRATH_CLASSIC) or false
 end
+addon._mists = wowtocver > 50000 and wowtocver < 60000
 addon._version = C_AddOns.GetAddOnMetadata(addonName,"Version")
 addon._addonName = addonName.." v"..addon._version
 addon._addonNameC = LIGHTBLUE_FONT_COLOR:WrapTextInColorCode(addon._addonName)
@@ -30,9 +31,13 @@ _p.spellData = {
   DRUID = 84840,
   WARRIOR = 93098,
   DEATHKNIGHT = 93099,
+  MONK = 120267,
   buffID = 76691,
   vigiID = 50720,
 }
+if addon._mists then
+  _p.spellData.buffID = 132365
+end
 _p.cleu_parser = CreateFrame("Frame")
 _p.cleu_parser.OnEvent = function(frame, event, ...)
   addon.HandleCombatEvent(addon,event,...)
@@ -641,7 +646,12 @@ end
 function addon:startProcessing()
   _p.baseHP = calcBaseHP()
   self:RegisterEvent("PLAYER_REGEN_DISABLED")
-  self:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+  if C_EventUtils.IsEventValid("ACTIVE_TALENT_GROUP_CHANGED") then
+    self:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+  end
+  if C_EventUtils.IsEventValid("PLAYER_SPECIALIZATION_CHANGED") then
+    self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+  end
   self:RegisterEvent("PLAYER_DEAD")
   self:RegisterEvent("PLAYER_LEVEL_UP")
   if addon._playerClass == "DRUID" then
@@ -649,8 +659,12 @@ function addon:startProcessing()
   end
   _p.unit_events:RegisterUnitEvent("UNIT_STATS","player")
   _p.unit_events:RegisterUnitEvent("UNIT_AURA","player")
+  if addon._mists then
+    _p.unit_events:RegisterUnitEvent("UNIT_MAXHEALTH","player")
+  end
   _p.cleu_parser:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
   self:GetVengeance()
+  self:GetVengeanceMax()
   if not addon.db.profile.hide then
     _p.Bar:Show()
   end
@@ -660,6 +674,9 @@ function addon:stopProcessing()
   self:UnregisterEvent("PLAYER_REGEN_DISABLED")
   _p.unit_events:UnregisterEvent("UNIT_STATS","player")
   _p.unit_events:UnregisterEvent("UNIT_AURA","player")
+  if addon._mists then
+    _p.unit_events:UnregisterEvent("UNIT_MAXHEALTH","player")
+  end
   _p.cleu_parser:UnregisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
   self:GetVengeance(0)
   _p.Bar:Hide()
@@ -756,6 +773,7 @@ function addon:OnEnable() -- PLAYER_LOGIN
     self:startProcessing()
   else
     _p.spell_learned_bucket = self:RegisterBucketEvent("LEARNED_SPELL_IN_TAB",1.0,"LEARNED_SPELL_IN_TAB")
+    self:stopProcessing()
     return
   end
   self:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -811,6 +829,16 @@ function addon:ACTIVE_TALENT_GROUP_CHANGED(event,...)
     self:stopProcessing()
   end
 end
+function addon:PLAYER_SPECIALIZATION_CHANGED(event,...)
+  local unit = ...
+  if UnitIsUnit(unit,"player") then
+    if IsPlayerSpell(_p.spellID) then
+      self:startProcessing()
+    else
+      self:stopProcessing()
+    end
+  end
+end
 function addon:UPDATE_SHAPESHIFT_FORM(event)
   local formid = GetShapeshiftFormID()
   if formid and (formid == CAT_FORM) then
@@ -845,6 +873,9 @@ end
 function addon:PLAYER_LEVEL_UP(event,...)
   local newLevel = ...
   calcBaseHP(nil,newLevel)
+end
+function addon:UNIT_MAXHEALTH(event)
+  self:GetVengeanceMax()
 end
 function addon:UNIT_STATS(event)
   self:GetVengeanceMax()
@@ -983,11 +1014,17 @@ function addon:GetVengeance(value)
 end
 
 function addon:GetVengeanceMax()
-  if not _p.baseHP then return end
-  local _, effectiveStam = UnitStat("player",LE_UNIT_STAT_STAMINA)
-  _p.vengeanceMax = math.floor((_p.baseHP*0.1)+effectiveStam)
-  self:DispatchUpdates()
-  return _p.vengeanceMax or 0
+  if addon._mists then
+    _p.vengeanceMax = UnitHealthMax("player")
+    self:DispatchUpdates()
+    return _p.vengeanceMax or 0
+  else
+    if not _p.baseHP then return end
+    local _, effectiveStam = UnitStat("player",LE_UNIT_STAT_STAMINA)
+    _p.vengeanceMax = math.floor((_p.baseHP*0.1)+effectiveStam)
+    self:DispatchUpdates()
+    return _p.vengeanceMax or 0
+  end
 end
 
 function addon:GetVengeanceDecay()
@@ -1018,6 +1055,8 @@ end
 _G[addonName] = addon
 -- Theorycraft
 --[[
+5.5.0
+Vengeance Cap: playerHealthMax
 4.3.4
 Vengeance Cap: baseHP/10 + stamina
 Vengeance Decay: Last Value/10 every 2 sec (20sec from last addition to zero out)

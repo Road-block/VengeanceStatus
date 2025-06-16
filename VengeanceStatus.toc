@@ -1,5 +1,5 @@
-## Interface: 40400
-## Version: 0.9.2
+## Interface: 50500 40402
+## Version: 0.9.3
 ## Title: Vengeance Status
 ## Notes: Tank Vengeance Information Widget
 ## IconTexture: Interface\ICONS\ability_paladin_shieldofvengeance
