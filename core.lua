@@ -400,8 +400,19 @@ function addon:ToggleLocked(status)
   end
 end
 
-function addon:Report()
-
+function addon:Report(num_records)
+  -- report last combat max
+  local records = VengeanceStatusDB.HISTORY.records
+  local max_veng = VengeanceStatusDB.HISTORY.max_veng
+  local combat_veng_prev = VengeanceStatusDB.HISTORY.combat_veng_prev
+  if max_veng and max_veng > 0 then
+    if combat_veng_prev and combat_veng_prev > 0 then
+      addon:Print(format("%s: |cff00ff00%s|r",L["Last Fight Max"],formatBigNumber(combat_veng_prev,1000)))
+    end
+    local record = records[#records]
+    local report = format("|cff00ff00%s|r (%s) Date:|cffffff00%s|r Enemy:|cffff0000%s|r Zone:|cffC4A484%s|r",formatBigNumber(record.v,1000), record.p, record.d, record.e, record.l)
+    addon:Print(format("%s: %s",L["Historical Max"],report))
+  end
 end
 
 function addon:RefreshConfig()
@@ -641,6 +652,36 @@ function addon:StatStorage(newLevel)
 end
 
 function addon:HistoryStorage()
+  local vengeance = _p.vengeance or 0
+  local prevMax = VengeanceStatusDB.HISTORY.max_veng or 0
+  local records = VengeanceStatusDB.HISTORY.records
+  if vengeance > prevMax then
+    local num_records = #records
+    if num_records > 99 then
+      for i=100,num_records do
+        tremove(records,1) -- kill oldest
+      end
+    end
+    local percent = _p.vengeanceMax > 0 and (vengeance/_p.vengeanceMax)*100 or 100
+    percent = format("%.2f%%",percent)
+    local datetime = date("%Y-%m-%d %H:%M:%S",GetServerTime())
+    local enemy = UnitExists("target") and UnitName("target") or _G.UNKNOWN
+    local location = GetRealZoneText() or _G.UNKNOWN
+    tinsert(records, {v=vengeance, p=percent, d=datetime, e=enemy, l=location})
+    VengeanceStatusDB.HISTORY.max_veng = vengeance
+  end
+  if _p.inCombat then
+    local combat_veng = VengeanceStatusDB.HISTORY.combat_veng or 0
+    if vengeance > combat_veng then
+      VengeanceStatusDB.HISTORY.combat_veng = vengeance
+    end
+  else
+    local combat_veng = VengeanceStatusDB.HISTORY.combat_veng
+    if combat_veng and combat_veng > 0 then
+      VengeanceStatusDB.HISTORY.combat_veng_prev = combat_veng
+    end
+    VengeanceStatusDB.HISTORY.combat_veng = nil
+  end
 end
 
 function addon:startProcessing()
@@ -763,6 +804,9 @@ function addon:OnInitialize() -- ADDON_LOADED
   LDBO.OnClick = addon.OnLDBClick
   LDBO.OnTooltipShow = addon.OnLDBTooltipShow
   LDI:Register(addonName, LDBO, addon.db.global.minimap)
+
+  VengeanceStatusDB.HISTORY = VengeanceStatusDB.HISTORY or {}
+  VengeanceStatusDB.HISTORY.records = VengeanceStatusDB.HISTORY.records or {}
 end
 
 function addon:OnEnable() -- PLAYER_LOGIN
@@ -850,15 +894,20 @@ end
 function addon:PLAYER_ENTERING_WORLD(event,...)
   local isLogin,isReload = ...
   if UnitAffectingCombat("player") then
+    _p.inCombat = true
     self:GetVengeanceMax()
     self:GetVengeance()
     self:RegisterEvent("PLAYER_REGEN_ENABLED")
+  else
+    _p.inCombat = false
   end
 end
 function addon:PLAYER_REGEN_DISABLED(event)
+  _p.inCombat = true
   self:RegisterEvent("PLAYER_REGEN_ENABLED")
 end
 function addon:PLAYER_REGEN_ENABLED(event)
+  _p.inCombat = false
   if not _p.vengeance or (_p.vengeance == 0) then
     LDBO.text = _p.spellInfo.name
   else
@@ -1010,6 +1059,7 @@ function addon:GetVengeance(value)
     _p.vengeance = value
   end
   self:DispatchUpdates()
+  self:HistoryStorage()
   return _p.vengeance or 0
 end
 

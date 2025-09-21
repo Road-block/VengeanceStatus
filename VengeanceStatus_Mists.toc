@@ -1,5 +1,5 @@
-## Interface: 50500
-## Version: 0.9.3
+## Interface: 50501,50500
+## Version: 1.0.0
 ## Title: Vengeance Status
 ## Notes: Tank Vengeance Information Widget
 ## IconTexture: Interface\ICONS\ability_paladin_shieldofvengeance
