@@ -5,6 +5,7 @@ if not L then return end
 L.CMD_LOCK = "Lock"
 L.CMD_SHOW = "Show/Hide"
 L.CMD_RESET = "Reset Position"
+L.CMD_HISTORY = "Historical Records"
 L["Stats"] = true
 L["History"] = true
 L["Hide from Minimap"] = true

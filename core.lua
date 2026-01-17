@@ -52,7 +52,14 @@ _p.unit_events:SetScript("OnEvent", _p.unit_events.OnEvent)
 _p.consolecmd = {type = "group", handler = addon, args = {
   show = {type="execute",name=_G.SHOW,desc=L.CMD_SHOW,func=function()addon:ToggleShown()end,order=1},
   lock = {type="execute",name=L.CMD_LOCK,desc=L.CMD_LOCK,func=function()addon:ToggleLocked()end,order=2},
-  reset = {type="execute",name=_G.RESET,desc=L.CMD_RESET,func=function()end,order=3},
+  history = {type="execute",name=_G.HISTORY,desc=L.CMD_HISTORY,
+    func=function(self)
+      local arg = self.input:match("(%d)$")
+      arg = tonumber(arg) or 10
+      addon:Report(arg)
+    end,
+  order=3},
+  reset = {type="execute",name=_G.RESET,desc=L.CMD_RESET,func=function()end,order=4},
 }}
 
 -- UTILS
@@ -402,16 +409,28 @@ end
 
 function addon:Report(num_records)
   -- report last combat max
-  local records = VengeanceStatusDB.HISTORY.records
-  local max_veng = VengeanceStatusDB.HISTORY.max_veng
-  local combat_veng_prev = VengeanceStatusDB.HISTORY.combat_veng_prev
+  local records = VengeanceStatusHistory.records
+  local max_veng = VengeanceStatusHistory.max_veng
+  local combat_veng_prev = VengeanceStatusHistory.combat_veng_prev
+  local stored_records = #records
   if max_veng and max_veng > 0 then
     if combat_veng_prev and combat_veng_prev > 0 then
       addon:Print(format("%s: |cff00ff00%s|r",L["Last Fight Max"],formatBigNumber(combat_veng_prev,1000)))
     end
-    local record = records[#records]
-    local report = format("|cff00ff00%s|r (%s) Date:|cffffff00%s|r Enemy:|cffff0000%s|r Zone:|cffC4A484%s|r",formatBigNumber(record.v,1000), record.p, record.d, record.e, record.l)
-    addon:Print(format("%s: %s",L["Historical Max"],report))
+    local record = records[stored_records]
+    if record then
+      local report = format("|cff00ff00%s|r (%s) Date:|cffffff00%s|r Enemy:|cffff0000%s|r Zone:|cffC4A484%s|r",formatBigNumber(record.v,1000), record.p, record.d, record.e, record.l)
+      addon:Print(format("%s: %s",L["Historical Max"],report))
+    end
+  end
+  local num_records = num_records and math.min(num_records,stored_records) or 0
+  if num_records > 0 then
+    local start_index = stored_records > num_records and (stored_records - num_records) or 1
+    for index=start_index, stored_records do
+      local record = records[index]
+      local report = format("|cff00ff00%s|r (%s) Date:|cffffff00%s|r Enemy:|cffff0000%s|r Zone:|cffC4A484%s|r",formatBigNumber(record.v,1000), record.p, record.d, record.e, record.l)
+      addon:Print(report)
+    end
   end
 end
 
@@ -651,36 +670,40 @@ function addon:StatStorage(newLevel)
   return VengeanceStatusDB.STATS[expansion][addon._playerClass][addon._playerRace][playerLevel]
 end
 
+local new_record
 function addon:HistoryStorage()
   local vengeance = _p.vengeance or 0
-  local prevMax = VengeanceStatusDB.HISTORY.max_veng or 0
-  local records = VengeanceStatusDB.HISTORY.records
+  local prevMax = VengeanceStatusHistory.max_veng or 0
+  local records = VengeanceStatusHistory.records
   if vengeance > prevMax then
+    VengeanceStatusHistory.max_veng = vengeance
+    local percent = _p.vengeanceMax > 0 and (vengeance/_p.vengeanceMax)*100 or 100
+    percent = format("%.2f%%",percent)
+    local datetime = date("%Y-%m-%d %H:%M:%S",GetServerTime())
+    local enemy = UnitExists("target") and UnitName("target") or _G.UNKNOWN
+    local location = GetRealZoneText() or _G.UNKNOWN
+    new_record = {v=vengeance, p=percent, d=datetime, e=enemy, l=location}
+  end
+  if _p.inCombat then
+    local combat_veng = VengeanceStatusHistory.combat_veng or 0
+    if vengeance > combat_veng then
+      VengeanceStatusHistory.combat_veng = vengeance
+    end
+  else
+    local combat_veng = VengeanceStatusHistory.combat_veng
+    if combat_veng and combat_veng > 0 then
+      VengeanceStatusHistory.combat_veng_prev = combat_veng
+    end
+    VengeanceStatusHistory.combat_veng = nil
     local num_records = #records
     if num_records > 99 then
       for i=100,num_records do
         tremove(records,1) -- kill oldest
       end
     end
-    local percent = _p.vengeanceMax > 0 and (vengeance/_p.vengeanceMax)*100 or 100
-    percent = format("%.2f%%",percent)
-    local datetime = date("%Y-%m-%d %H:%M:%S",GetServerTime())
-    local enemy = UnitExists("target") and UnitName("target") or _G.UNKNOWN
-    local location = GetRealZoneText() or _G.UNKNOWN
-    tinsert(records, {v=vengeance, p=percent, d=datetime, e=enemy, l=location})
-    VengeanceStatusDB.HISTORY.max_veng = vengeance
-  end
-  if _p.inCombat then
-    local combat_veng = VengeanceStatusDB.HISTORY.combat_veng or 0
-    if vengeance > combat_veng then
-      VengeanceStatusDB.HISTORY.combat_veng = vengeance
+    if new_record then
+      tinsert(records, new_record)
     end
-  else
-    local combat_veng = VengeanceStatusDB.HISTORY.combat_veng
-    if combat_veng and combat_veng > 0 then
-      VengeanceStatusDB.HISTORY.combat_veng_prev = combat_veng
-    end
-    VengeanceStatusDB.HISTORY.combat_veng = nil
   end
 end
 
@@ -805,8 +828,8 @@ function addon:OnInitialize() -- ADDON_LOADED
   LDBO.OnTooltipShow = addon.OnLDBTooltipShow
   LDI:Register(addonName, LDBO, addon.db.global.minimap)
 
-  VengeanceStatusDB.HISTORY = VengeanceStatusDB.HISTORY or {}
-  VengeanceStatusDB.HISTORY.records = VengeanceStatusDB.HISTORY.records or {}
+  VengeanceStatusHistory = VengeanceStatusHistory or {}
+  VengeanceStatusHistory.records = VengeanceStatusHistory.records or {}
 end
 
 function addon:OnEnable() -- PLAYER_LOGIN
