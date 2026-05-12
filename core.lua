@@ -61,7 +61,7 @@ _p.consolecmd = {type = "group", handler = addon, args = {
   order=3},
   reset = {type="execute",name=_G.RESET,desc=L.CMD_RESET,func=function()end,order=4},
 }}
-
+_p.new_record = _p.new_record or {}
 -- UTILS
 _p.denominations = {{"T",1e12},{"G",1e9},{"M",1e6},{"k",1e3}}--,{"h",1e2},{"da",10}}
 local function formatBigNumber(n,uncap)
@@ -284,7 +284,11 @@ function addon:createUI()
   bar:SetStatusBarTexture(barOpt.texture)
   bar:SetStatusBarColor(unpack(barOpt.color))
   bar:SetColorFill(unpack(barOpt.fillColor))
-  bar:SetFillStyle("STANDARD")
+  if Enum.StatusBarFillStyle then
+    bar:SetFillStyle(Enum.StatusBarFillStyle.Standard)
+  else
+    bar:SetFillStyle("STANDARD")
+  end
   bar:SetMinMaxValues(0,100)
   bar:SetValue(0)
   bar.locked = true
@@ -670,11 +674,29 @@ function addon:StatStorage(newLevel)
   return VengeanceStatusDB.STATS[expansion][addon._playerClass][addon._playerRace][playerLevel]
 end
 
-local new_record
+function addon:HistoryRecordStorage()
+  local records = VengeanceStatusHistory.records
+  local num_records = #records
+  if num_records > 99 then
+    for i=100,num_records do
+      tremove(records,1) -- kill oldest
+    end
+  end
+  if _p.new_record and _p.new_record.v then
+    if num_records > 0 then
+      local last_record_value = records[num_records].v
+      if not last_record_value or (last_record_value < _p.new_record.v) then
+        tinsert(records,{v=_p.new_record.v, p=_p.new_record.p, d=_p.new_record.d, e=_p.new_record.e, l=_p.new_record.l})
+      end
+    else
+      tinsert(records,{v=_p.new_record.v, p=_p.new_record.p, d=_p.new_record.d, e=_p.new_record.e, l=_p.new_record.l})
+    end
+  end
+end
+
 function addon:HistoryStorage()
   local vengeance = _p.vengeance or 0
   local prevMax = VengeanceStatusHistory.max_veng or 0
-  local records = VengeanceStatusHistory.records
   if vengeance > prevMax then
     VengeanceStatusHistory.max_veng = vengeance
     local percent = _p.vengeanceMax > 0 and (vengeance/_p.vengeanceMax)*100 or 100
@@ -682,7 +704,11 @@ function addon:HistoryStorage()
     local datetime = date("%Y-%m-%d %H:%M:%S",GetServerTime())
     local enemy = UnitExists("target") and UnitName("target") or _G.UNKNOWN
     local location = GetRealZoneText() or _G.UNKNOWN
-    new_record = {v=vengeance, p=percent, d=datetime, e=enemy, l=location}
+    _p.new_record.v = vengeance
+    _p.new_record.p = percent
+    _p.new_record.d = datetime
+    _p.new_record.e = enemy
+    _p.new_record.l = location
   end
   if _p.inCombat then
     local combat_veng = VengeanceStatusHistory.combat_veng or 0
@@ -695,15 +721,6 @@ function addon:HistoryStorage()
       VengeanceStatusHistory.combat_veng_prev = combat_veng
     end
     VengeanceStatusHistory.combat_veng = nil
-    local num_records = #records
-    if num_records > 99 then
-      for i=100,num_records do
-        tremove(records,1) -- kill oldest
-      end
-    end
-    if new_record then
-      tinsert(records, new_record)
-    end
   end
 end
 
@@ -839,7 +856,11 @@ function addon:OnEnable() -- PLAYER_LOGIN
   if IsPlayerSpell(_p.spellID) then
     self:startProcessing()
   else
-    _p.spell_learned_bucket = self:RegisterBucketEvent("LEARNED_SPELL_IN_TAB",1.0,"LEARNED_SPELL_IN_TAB")
+    if C_EventUtils.IsEventValid("LEARNED_SPELL_IN_TAB") then
+      _p.spell_learned_bucket = self:RegisterBucketEvent("LEARNED_SPELL_IN_TAB",1.0,"LEARNED_SPELL_IN_TAB")
+    elseif C_EventUtils.IsEventValid("LEARNED_SPELL_IN_SKILL_LINE") then
+      _p.spell_learned_bucket = self:RegisterBucketEvent("LEARNED_SPELL_IN_SKILL_LINE",1.0,"LEARNED_SPELL_IN_TAB")
+    end
     self:stopProcessing()
     return
   end
@@ -938,6 +959,7 @@ function addon:PLAYER_REGEN_ENABLED(event)
       _p.decayTimer = self:ScheduleRepeatingTimer("DecayTimer",2.0)
     end
   end
+  self:HistoryRecordStorage()
 end
 function addon:PLAYER_DEAD()
   calcBaseHP(true)
@@ -1000,7 +1022,12 @@ local COMBATLOG_FILTER_HOSTILE_PVE = bit.bor(
   COMBATLOG_OBJECT_TYPE_GUARDIAN,
   COMBATLOG_OBJECT_TYPE_OBJECT
   )
-local COMBATLOG_FILTER_ME = _G.COMBATLOG_FILTER_ME
+local COMBATLOG_FILTER_ME = _G.COMBATLOG_FILTER_ME or bit.bor(
+            COMBATLOG_OBJECT_AFFILIATION_MINE,
+            COMBATLOG_OBJECT_REACTION_FRIENDLY,
+            COMBATLOG_OBJECT_CONTROL_PLAYER,
+            COMBATLOG_OBJECT_TYPE_PLAYER
+            )
 local subEvents = {
   ["SWING_DAMAGE"] = true,
   ["SPELL_DAMAGE"] = true,
